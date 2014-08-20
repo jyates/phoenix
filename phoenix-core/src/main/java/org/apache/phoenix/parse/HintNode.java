@@ -92,6 +92,15 @@ public class HintNode {
         * between 2 selected columns this will be give better performance.
         */
       NO_SEEK_TO_COLUMN,
+        /**
+         * Add a key-value annotation to the given query in the form "TRACE_ANNOTATION(key=value)"
+         */
+      TRACE_ANNOTATION,
+        /**
+         * Add an arbitrary string to the given query in the form "TRACE_TAG(tag)". Does not support
+         * preservating case syntax.
+         */
+        TRACE_TAG,
     };
 
     private final Map<Hint,String> hints;

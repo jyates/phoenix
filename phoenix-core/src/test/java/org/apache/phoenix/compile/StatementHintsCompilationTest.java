@@ -28,6 +28,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -35,9 +36,12 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -61,16 +65,28 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
         return filter instanceof SkipScanFilter;
     }
 
+    private static QueryPlan compileQuery(String query) throws SQLException {
+        return compileQuery(query, Collections.emptyList(), null);
+    }
+
+    private static QueryPlan compileQuery(String query, List<Object> binds, Integer limit)
+            throws SQLException {
+        PhoenixConnection pconn =
+                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                        .unwrap(PhoenixConnection.class);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        TestUtil.bindParams(pstmt, binds);
+        QueryPlan plan = pstmt.compileQuery();
+        assertEquals(limit, plan.getLimit());
+        return plan;
+    }
+
     private static StatementContext compileStatement(String query) throws SQLException {
         return compileStatement(query, Collections.emptyList(), null);
     }
 
     private static StatementContext compileStatement(String query, List<Object> binds, Integer limit) throws SQLException {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
-        TestUtil.bindParams(pstmt, binds);
-        QueryPlan plan = pstmt.compileQuery();
-        assertEquals(limit, plan.getLimit());
+        QueryPlan plan = compileQuery(query, binds, limit);
         return plan.getContext();
     }
 
@@ -102,5 +118,62 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
                 "    SERVER FILTER BY (CREATED_DATE >= '2012-11-01 00:00:00.000' AND CREATED_DATE < '2012-11-30 00:00:00.000')\n" + 
                 "    SERVER TOP 100 ROWS SORTED BY [ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]\n" + 
                 "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
+    }
+    
+    @Test
+    public void testAddTraceSingleAnnotation() throws Exception{
+        String query = "SELECT /*+ TRACE_ANNOTATION(somekey=somevalue) */ * FROM atable ";
+        QueryPlan plan = compileQuery(query);
+        Map<String, String> annotations = Tracing.getClientAnnotations(plan.getStatement());
+        assertEquals(1, annotations.size());
+        assertEquals("SOMEVALUE", annotations.get("SOMEKEY"));
+    }
+    
+    @Test
+    public void testAddTraceAnnotationPreserveCase() throws Exception {
+        String query = "SELECT /*+ TRACE_ANNOTATION(\"somekey=somevalue\") */ * FROM atable ";
+        QueryPlan plan = compileQuery(query);
+        Map<String, String> annotations = Tracing.getClientAnnotations(plan.getStatement());
+        assertEquals(1, annotations.size());
+        assertEquals("somevalue", annotations.get("somekey"));
+    }
+    
+    @Test
+    public void testAddMultipleAnnotations() throws Exception {
+        String query =
+                "SELECT /*+ " + HintNode.Hint.TRACE_ANNOTATION.name() + "(\"somekey=somevalue\") "
+                        + HintNode.Hint.TRACE_ANNOTATION.name()
+                        + "(keytwo=valuetwo) */ * FROM atable ";
+        QueryPlan plan = compileQuery(query);
+        Map<String, String> annotations = Tracing.getClientAnnotations(plan.getStatement());
+        assertEquals(2, annotations.size());
+        assertEquals("somevalue", annotations.get("somekey"));
+        assertEquals("VALUETWO", annotations.get("KEYTWO"));
+    }
+
+    @Test
+    public void testAddTraceSingleTag() throws Exception{
+        String v1 = "tag value one";
+        String query =
+                "SELECT /*+ " + HintNode.Hint.TRACE_TAG.name() + "(" + v1 + ") */"
+                        + "* FROM atable ";
+        QueryPlan plan = compileQuery(query);
+        List<String> tags = Tracing.getClientTags(plan.getStatement());
+        assertEquals(1, tags.size());
+        assertEquals(v1.toUpperCase(), tags.get(0));
+    }
+    
+    @Test
+    public void testAddMultipleTags() throws Exception{
+        String v1 = "tag value one";
+        String v2 = "another value";
+        String query =
+                "SELECT /*+ " + HintNode.Hint.TRACE_TAG.name() + "(" + v1 + ") "
+                        + HintNode.Hint.TRACE_TAG.name() + "(" + v2 + ") */ * FROM atable ";
+        QueryPlan plan = compileQuery(query);
+        List<String> tags = Tracing.getClientTags(plan.getStatement());
+        assertEquals(2, tags.size());
+        assertEquals(v1.toUpperCase(), tags.get(0));
+        assertEquals(v2.toUpperCase(), tags.get(1));
     }
 }

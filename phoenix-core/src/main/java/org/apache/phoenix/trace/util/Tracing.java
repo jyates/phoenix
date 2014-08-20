@@ -17,8 +17,14 @@
  */
 package org.apache.phoenix.trace.util;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
+
+import javax.annotation.Nullable;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -29,6 +35,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.call.CallWrapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TracingCompat;
@@ -298,5 +307,93 @@ public class Tracing {
                     + "TraceMetricsSink found on the classpath", e);
         }
         initialized = true;
+    }
+
+    /**
+     * @param statement
+     * @return the annotations specified in the request statement
+     */
+    public static Map<String, String> getClientAnnotations(FilterableStatement statement) {
+        final Map<String, String> annotations = new HashMap<String, String>();
+        getClientHints(Hint.TRACE_ANNOTATION, statement, new Function<String, Void>() {
+            @Override
+            @Nullable
+            public Void apply(@Nullable String elem) {
+                if (elem == null) {
+                    return null;
+                }
+                String[] kv = elem.split("=");
+                if (kv.length != 2) {
+                    throw new IllegalArgumentException(
+                            "Got a trace annotation element with incorrrect synatx! Element: "
+                                    + elem);
+                }
+
+                annotations.put(kv[0], kv[1]);
+                return null;
+            }
+        });
+        return annotations;
+    }
+    
+    /**
+     * @param statement
+     * @return the tags specified in the statement
+     */
+    public static List<String> getClientTags(FilterableStatement statement) {
+        final List<String> tags = new ArrayList<String>();
+        getClientHints(Hint.TRACE_TAG, statement, new Function<String, Void>() {
+            @Override
+            @Nullable
+            public Void apply(@Nullable String elem) {
+                if (elem != null) {
+                    tags.add(elem);
+                    return null;
+                }
+                return null;
+            }
+        });
+        return tags;
+    }
+
+    private static final String SPLIT_REGEXP = "((?<=\\" + HintNode.PREFIX + ")|(?=\\"
+            + HintNode.PREFIX + "))|((?<=\\" + HintNode.SUFFIX + ")|(?=\\" + HintNode.SUFFIX + "))";
+
+    /**
+     * @param hintKey key to look for in the hint
+     * @param statement to parse
+     * @param propertyHandler handles when we find a property in the statement. May be called
+     *            multiple times if the hint is specified multiple times
+     */
+    private static void getClientHints(Hint hintKey,
+            FilterableStatement statement, Function<String, Void> propertyHandler) {
+        HintNode hint= statement.getHint();
+        String value = hint.getHint(hintKey);
+        if (value == null) {
+            return;
+        }
+
+        String[] split = value.split(SPLIT_REGEXP);// (\\()|(\\))");
+        String val = null;
+        for (String elem : split) {
+            elem = elem.trim();
+            if (elem.isEmpty()) {
+                continue;
+            }
+            // start of a new element
+            else if (elem.equals(HintNode.PREFIX)) {
+                assert val == null;
+                continue;
+            }
+            // store it in the annotations
+            else if (elem.equals(HintNode.SUFFIX)) {
+                propertyHandler.apply(val);
+                // reset the key/value
+                val = null;
+                continue;
+            }
+            // must be a k/v, so split that
+            val = elem;
+        }
     }
 }

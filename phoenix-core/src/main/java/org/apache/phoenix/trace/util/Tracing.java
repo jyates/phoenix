@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 
@@ -41,6 +42,7 @@ import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TracingCompat;
+import org.apache.phoenix.util.StringUtil;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
@@ -394,6 +396,39 @@ public class Tracing {
             }
             // must be a k/v, so split that
             val = elem;
+        }
+    }
+
+    /**
+     * @param span to update, or do not work if <tt>null</tt>
+     * @param statement to parse for annotation hints
+     */
+    public static void addAnnotations(Span span, FilterableStatement statement) {
+        if (span == null) {
+            return;
+        }
+
+        Map<String, String> annotations = getClientAnnotations(statement);
+        // copy over the annotations as bytes
+        for (Entry<String, String> annotation : annotations.entrySet()) {
+            span.addKVAnnotation(StringUtil.toBytes(annotation.getKey()),
+                StringUtil.toBytes(annotation.getValue()));
+        }
+    }
+
+    /**
+     * @param span to update, or do not work if <tt>null</tt>
+     * @param statement to parse for tag hints
+     */
+    public static void addTags(Span span, FilterableStatement statement) {
+        if (span == null) {
+            return;
+        }
+
+        List<String> tags = getClientTags(statement);
+        // copy over the annotations as bytes
+        for (String tag : tags) {
+            span.addTimelineAnnotation(tag);
         }
     }
 }

@@ -230,7 +230,12 @@ public abstract class BasicQueryPlan implements QueryPlan {
         TraceScope scope =
                 Tracing.startNewSpan(context.getConnection(), "Creating basic query for "
                         + getPlanSteps(iterator));
-        return (scope.getSpan() != null) ? new TracingIterator(scope, iterator) : iterator;
+        if (scope.getSpan() == null) {
+            iterator = new TracingIterator(scope, iterator);
+            Tracing.addAnnotations(scope.getSpan(), this.statement);
+            Tracing.addTags(scope.getSpan(), this.statement);
+        }
+        return iterator;
     }
 
     private void serializeIndexMaintainerIntoScan(Scan scan, PTable dataTable) {

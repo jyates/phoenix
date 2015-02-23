@@ -166,6 +166,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         }
                         HTableInterface table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
+                        LOG.info("Jesse - writing mutations in index");
                         table.batch(mutations);
                     } catch (SingleIndexWriteFailureException e) {
                         throw e;

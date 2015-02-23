@@ -19,6 +19,8 @@ package org.apache.hadoop.hbase.ipc;
 
 import java.io.IOException;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -32,6 +34,8 @@ import com.google.common.annotations.VisibleForTesting;
  * treated with the same priority and put into the same queue.
  */
 public class PhoenixIndexRpcScheduler extends RpcScheduler {
+
+    private static final Log LOG = LogFactory.getLog(PhoenixIndexRpcScheduler.class);
 
     // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
     public static final String CALL_QUEUE_READ_SHARE_CONF_KEY = "ipc.server.callqueue.read.share";
@@ -62,6 +66,8 @@ public class PhoenixIndexRpcScheduler extends RpcScheduler {
         this.callExecutor =
                 new BalancedQueueRpcExecutor("Index", indexHandlerCount, numCallQueues,
                         maxQueueLength);
+        LOG.debug("Jesse: using index rpc scheduler on server, prioritys: min-" + this.minPriority + ", max:" + this
+                .maxPriority+"; delegate: "+this.delegate);
     }
 
     @Override
@@ -85,8 +91,10 @@ public class PhoenixIndexRpcScheduler extends RpcScheduler {
         RpcServer.Call call = callTask.getCall();
         int priority = call.header.getPriority();
         if (minPriority <= priority && priority < maxPriority) {
+            LOG.info("Jesse: Found an index update - priority: "+priority);
             callExecutor.dispatch(callTask);
         } else {
+            LOG.info("Jesse: Found a regular update - priority: "+priority);
             delegate.dispatch(callTask);
         }
     }

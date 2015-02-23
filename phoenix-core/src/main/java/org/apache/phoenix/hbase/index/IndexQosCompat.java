@@ -58,6 +58,7 @@ public class IndexQosCompat {
      */
     public static void setPhoenixIndexRpcController(Configuration conf) {
         if (rpcControllerExists()) {
+            LOG.info("Jesse - Setting rpc controler to the phonix index controller")
             // then we can load the class just fine
             conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
                 PhoenixIndexRpcSchedulerFactory.class.getName());
@@ -65,12 +66,13 @@ public class IndexQosCompat {
     }
 
     private static boolean rpcControllerExists() {
-        if (checked) {
+        if (!checked) {
             synchronized (IndexQosCompat.class) {
                 if (!checked) {
                     // try loading the class
                     try {
                         Class.forName(HBASE_RPC_CONTROLLER_CLASS_NAME);
+                        LOG.debug("Jesse: RPC Controller class exists, we can use the phoenix RPC controller instead");
                         rpcControllerExists = true;
                     } catch (ClassNotFoundException e) {
                         LOG.warn("RpcControllerFactory doesn't exist, not setting custom index handler properties.");

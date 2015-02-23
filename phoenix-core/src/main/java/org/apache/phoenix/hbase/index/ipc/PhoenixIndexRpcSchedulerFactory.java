@@ -42,6 +42,10 @@ public class PhoenixIndexRpcSchedulerFactory implements RpcSchedulerFactory {
     private static final String VERSION_TOO_OLD_FOR_INDEX_RPC =
             "Running an older version of HBase (less than 0.98.4), Phoenix index RPC handling cannot be enabled.";
 
+    public PhoenixIndexRpcSchedulerFactory(){
+        LOG.debug("Jesse: Creating rpc scheduler factory");
+    }
+
     @Override
     public RpcScheduler create(Configuration conf, RegionServerServices services) {
         // create the delegate scheduler

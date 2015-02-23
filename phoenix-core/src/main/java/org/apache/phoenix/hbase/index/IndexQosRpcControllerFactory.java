@@ -19,6 +19,8 @@ package org.apache.phoenix.hbase.index;
 
 import java.util.List;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
@@ -34,10 +36,12 @@ import org.apache.phoenix.hbase.index.ipc.PhoenixIndexRpcSchedulerFactory;
  */
 public class IndexQosRpcControllerFactory extends RpcControllerFactory {
 
+    private static final Log LOG = LogFactory.getLog(IndexQosRpcControllerFactory.class);
     public static final String INDEX_TABLE_NAMES_KEY = "phoenix.index.rpc.controller.index-tables";
 
     public IndexQosRpcControllerFactory(Configuration conf) {
         super(conf);
+        LOG.debug("Jesse: Using Index Qos RPC Controller factory!");
     }
 
     @Override
@@ -77,6 +81,7 @@ public class IndexQosRpcControllerFactory extends RpcControllerFactory {
             } else {
                 super.setPriority(tn);
             }
+            LOG.debug("Jesse: Setting priority for "+tn+ "to: "+this.getPriority()+", isIndex: "+isIndexTable(tn));
         }
 
         private boolean isIndexTable(TableName tn) {
